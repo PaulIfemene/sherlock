@@ -2,7 +2,7 @@
 // to the caller immediately and lets this run for up to 15 minutes.
 import { z } from 'zod'
 import { buildDeps } from '../../engine/adapters'
-import { parseWebhook } from '../../engine/intake'
+import { parseIncoming } from '../../engine/adapters/greenapi'
 import { handleWhatsAppMessage, processWebClaim } from '../lib/conversation'
 import { isInternal, siteOrigin } from '../lib/http'
 import { applySettings } from '../lib/settings'
@@ -21,7 +21,8 @@ export default async (req: Request): Promise<Response> => {
   if (parsed.data.source === 'web') {
     await processWebClaim(parsed.data.claim_id, deps, origin)
   } else {
-    for (const msg of parseWebhook(parsed.data.payload)) {
+    const msg = parseIncoming(parsed.data.payload)
+    if (msg) {
       try {
         await handleWhatsAppMessage(msg, deps, origin)
       } catch (err) {

@@ -4,10 +4,7 @@ import type { AiLabel, Lang } from '../../engine/types'
 import { decryptAddress } from '../../engine/privacy'
 import { verdictMessage } from '../../engine/feedback'
 import { ticketFor } from '../../engine/reply'
-import { WindowClosedError } from '../../engine/adapters/whatsapp'
 import type { Journalist } from './http'
-
-const WINDOW_MS = 24 * 60 * 60 * 1000
 
 export interface PublishInput {
   cluster_id: string
@@ -93,9 +90,11 @@ export async function publishVerdict(input: PublishInput, journalist: Journalist
       await mark('failed', sender ? 'sender opted out' : 'sender erased their data')
       return
     }
-    if (!sender.last_message_at || now - new Date(sender.last_message_at).getTime() > WINDOW_MS) {
+    // Only providers with a reply window (Meta) need a template after it closes. Green API has none.
+    const windowMs = deps.whatsapp.replyWindowMs
+    if (windowMs !== null && (!sender.last_message_at || now - new Date(sender.last_message_at).getTime() > windowMs)) {
       delivery.needs_template++
-      await mark('needs_template', 'outside the 24-hour window; needs a Meta-approved utility template')
+      await mark('needs_template', 'outside the reply window; needs an approved template')
       return
     }
     const address = await deps.store.getReplyAddress(claim.sender_hash)
@@ -113,13 +112,8 @@ export async function publishVerdict(input: PublishInput, journalist: Journalist
       else delivery.simulated++
       await mark('sent', deps.whatsapp.live ? null : 'simulated: WhatsApp not configured')
     } catch (err) {
-      if (err instanceof WindowClosedError) {
-        delivery.needs_template++
-        await mark('needs_template', 'outside the 24-hour window')
-      } else {
-        delivery.failed++
-        await mark('failed', (err as Error).message.slice(0, 300))
-      }
+      delivery.failed++
+      await mark('failed', (err as Error).message.slice(0, 300))
     }
   }
 

@@ -23,7 +23,7 @@ const Body = z
 
 export default async (req: Request): Promise<Response> => {
   const deps = await applySettings(buildDeps())
-  const secret = deps.config.phoneHashSecret || 'sherlock-dev-only'
+  const secret = deps.config.phoneHashSecret
 
   if (req.method === 'GET') {
     const url = new URL(req.url)

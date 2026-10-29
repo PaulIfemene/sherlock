@@ -1,7 +1,8 @@
 // WhatsApp conversation and web-check processing. Runs inside process-message-background.
 import type { ServerDeps } from '../../engine/adapters'
 import type { Lang } from '../../engine/types'
-import { CONSENT_VERSION, LANGUAGE_SET_TEXT, parseKeyword, SYSTEM_TEXT, type InboundMessage } from '../../engine/intake'
+import { CONSENT_VERSION, LANGUAGE_SET_TEXT, parseKeyword, SYSTEM_TEXT } from '../../engine/intake'
+import type { InboundMessage } from '../../engine/adapters/greenapi'
 import { encryptAddress, hashSender, toE164 } from '../../engine/privacy'
 import { runPipeline } from '../../engine/pipeline'
 import { ticketFor } from '../../engine/reply'
@@ -76,7 +77,7 @@ export async function handleWhatsAppMessage(msg: InboundMessage, deps: ServerDep
     if (!firstContact) await say(deps, e164, `${SYSTEM_TEXT.languageMenu} Send a message or screenshot to check it.`, lang)
     return
   }
-  if (msg.type === 'other' || (!msg.text && !msg.mediaId)) {
+  if (msg.type === 'other' || (!msg.text && !msg.mediaRef)) {
     await say(deps, e164, SYSTEM_TEXT.unsupported, lang)
     return
   }
@@ -84,8 +85,8 @@ export async function handleWhatsAppMessage(msg: InboundMessage, deps: ServerDep
   const claim = await store.createClaim({ channel: 'whatsapp', sender_hash: hash, is_demo: false })
   try {
     let image: Uint8Array | null = null
-    if (msg.mediaId) {
-      const media = await deps.whatsapp.downloadMedia(msg.mediaId)
+    if (msg.mediaRef) {
+      const media = await deps.whatsapp.downloadMedia(msg.mediaRef)
       image = media.bytes
       if (deps.db) {
         const path = `${claim.id}.${media.mimeType.includes('png') ? 'png' : 'jpg'}`

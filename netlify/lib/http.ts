@@ -1,5 +1,5 @@
 // Shared helpers for Netlify Functions: JSON responses, journalist auth and internal calls.
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -29,10 +29,15 @@ export async function requireJournalist(req: Request, db: SupabaseClient | null)
   return journalist as Journalist
 }
 
+// Without PHONE_HASH_SECRET, a random per-process secret: fine for `npm run dev` (one process),
+// but separate Netlify functions would not match, so production must set the secret.
+const devSecret = randomBytes(32).toString('hex')
+
 /** Secret for function-to-function calls. Derived from PHONE_HASH_SECRET unless set explicitly. */
 export function internalSecret(env = process.env): string {
   if (env.INTERNAL_FUNCTION_SECRET) return env.INTERNAL_FUNCTION_SECRET
-  return createHmac('sha256', env.PHONE_HASH_SECRET || 'sherlock-dev-only').update('internal-functions').digest('hex')
+  if (!env.PHONE_HASH_SECRET) return devSecret
+  return createHmac('sha256', env.PHONE_HASH_SECRET).update('internal-functions').digest('hex')
 }
 
 export function isInternal(req: Request): boolean {
@@ -54,4 +59,10 @@ export async function triggerBackground(origin: string, payload: unknown): Promi
 /** Public site origin: Netlify's URL in production, the request origin elsewhere. */
 export function siteOrigin(req: Request): string {
   return process.env.URL && process.env.CONTEXT === 'production' ? process.env.URL : new URL(req.url).origin
+}
+
+/** True for requests to a local dev server. Never true on Netlify. */
+export function isLocal(req: Request): boolean {
+  if (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME) return false
+  return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(req.url).hostname)
 }

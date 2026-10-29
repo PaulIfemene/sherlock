@@ -7,8 +7,7 @@ import { cannedLlm } from '../engine/adapters/llm'
 import { cannedOcr } from '../engine/adapters/vision'
 import { cannedFactCheck } from '../engine/adapters/factcheck'
 import { cannedWebSearch } from '../engine/adapters/brave'
-import { parseKeyword, parseWebhook, verifyChallenge, verifySignature } from '../engine/intake'
-import { createHmac } from 'node:crypto'
+import { parseKeyword } from '../engine/intake'
 import type { Translator } from '../engine/ports'
 
 const translator: Translator = {
@@ -95,40 +94,6 @@ describe('runPipeline in demo mode', () => {
 })
 
 describe('intake', () => {
-  it('verifies the Meta challenge', () => {
-    const p = new URLSearchParams({ 'hub.mode': 'subscribe', 'hub.verify_token': 't', 'hub.challenge': '42' })
-    expect(verifyChallenge(p, 't')).toBe('42')
-    expect(verifyChallenge(p, 'other')).toBeNull()
-    expect(verifyChallenge(p, '')).toBeNull()
-  })
-
-  it('verifies X-Hub-Signature-256', () => {
-    const body = '{"a":1}'
-    const sig = `sha256=${createHmac('sha256', 'secret').update(body).digest('hex')}`
-    expect(verifySignature('secret', body, sig)).toBe(true)
-    expect(verifySignature('secret', body + ' ', sig)).toBe(false)
-    expect(verifySignature('secret', body, null)).toBe(false)
-  })
-
-  it('parses text and image messages and ignores status callbacks', () => {
-    const body = {
-      object: 'whatsapp_business_account',
-      entry: [
-        {
-          changes: [
-            { field: 'messages', value: { messages: [{ from: '256700000001', id: 'm1', timestamp: '1761739200', type: 'text', text: { body: 'hello' } }] } },
-            { field: 'messages', value: { messages: [{ from: '256700000001', id: 'm2', timestamp: '1761739200', type: 'image', image: { id: 'media-1', caption: 'is this true?' } }] } },
-            { field: 'messages', value: { statuses: [{ id: 'x' }] } },
-          ],
-        },
-      ],
-    }
-    const msgs = parseWebhook(body)
-    expect(msgs).toHaveLength(2)
-    expect(msgs[1]).toMatchObject({ type: 'image', mediaId: 'media-1', text: 'is this true?' })
-    expect(parseWebhook({ nonsense: true })).toEqual([])
-  })
-
   it('recognises keywords', () => {
     expect(parseKeyword('STOP')).toEqual({ kind: 'stop' })
     expect(parseKeyword(' delete ')).toEqual({ kind: 'delete' })

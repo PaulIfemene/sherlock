@@ -30,7 +30,7 @@ Sherlock never claims to know intent. Intent is inferred from patterns (forgery,
 
 1. **Honesty in the demo.** All simulated data, counts and actions are labelled "demo" or "simulated" in the UI. Never present mocked behaviour as live.
 2. **No impersonation.** Do not use real outlets (for example BBC, New Vision), real officials, or real presidents in demo data, fake posts, or journalist personas. Use clearly fictional names ("Demo Reporter, Sample Newsroom"; "a ministry notice").
-3. **Official WhatsApp only.** Use Meta's WhatsApp Cloud API (test number for the demo). Do **not** use Green API, WAHA, or any unofficial WhatsApp client.
+3. **WhatsApp through Green API.** Decided by the team on 29 Oct 2026, replacing the earlier Meta-only rule. Green API (free Developer plan) links a dedicated demo phone as a WhatsApp Web device. All WhatsApp code stays in `engine/adapters/greenapi.ts`. Use a dedicated demo number, never a personal one: Green API is not Meta's official API and a linked number can be restricted. Move to Meta's Cloud API before any public launch.
 4. **Privacy by design.** This falls under Uganda's Data Protection and Privacy Act 2019:
    - Never store raw phone numbers in claim or analytics tables.
    - `sender_hash = HMAC-SHA256(PHONE_HASH_SECRET, e164_phone)`. Never a plain hash, because phone numbers can be brute-forced.
@@ -70,7 +70,7 @@ Sherlock never claims to know intent. Intent is inferred from patterns (forgery,
 | Front end | React 19, Vite, TypeScript (strict), Tailwind CSS v4, React Router, Recharts |
 | Backend | Netlify Functions (TypeScript). Use background functions (`*-background.ts`) for the slow AI pipeline. Use scheduled functions for the source scraper |
 | Database | Supabase: Postgres, `pgvector`, Realtime (live dashboard), Auth (magic-link login for journalists), RLS |
-| WhatsApp | Meta WhatsApp Cloud API, test number for the demo |
+| WhatsApp | Green API (free Developer plan) with a dedicated demo number. Adapter: `engine/adapters/greenapi.ts` |
 | Translation and speech | Sunbird AI API |
 | LLM | **Zero budget:** one OpenAI-compatible chat adapter configured by env (`LLM_CHAT_URL`, `LLM_API_KEY`, `LLM_MODEL`). Default: **Groq free tier** (`https://api.groq.com/openai/v1/chat/completions`, a Llama 70B-class model; check Groq's model list). Optional: Sunbird Sunflower (`https://api.sunbird.ai/tasks/chat/completions`, `sunflower-14b`) for Luganda-native wording. Claude can be swapped in later when funded |
 | OCR (screenshots) | Google Cloud Vision `TEXT_DETECTION` (first 1,000 units a month free; needs the Vision API enabled on the Google Cloud project) |
@@ -310,12 +310,11 @@ create table outbound_queue (              -- feedback after publish
 All stages live in `engine/` as pure functions with injected adapters, so they can be tested with mocks.
 
 1. **Intake** (`whatsapp-webhook.ts`)
-   - `GET`: Meta verification. If `hub.mode === 'subscribe'` and `hub.verify_token === WHATSAPP_VERIFY_TOKEN`, return `hub.challenge`.
-   - `POST`: verify `X-Hub-Signature-256` (HMAC-SHA256 of the raw body with `WHATSAPP_APP_SECRET`). Reject on mismatch. Return `200` immediately, then trigger `process-message-background`.
+   - `POST` only. Green API sends `Authorization: Bearer <GREENAPI_WEBHOOK_TOKEN>` (set as webhookUrlToken in the console); compare in constant time and reject on mismatch. Handle only `incomingMessageReceived` from one-to-one chats (`@c.us`); ignore groups, our own outgoing messages and status callbacks. Return `200` immediately, then trigger `process-message-background`.
    - Handle keywords: STOP, DELETE, MYDATA, and 1/2/3 for the language choice. On first contact, send the consent line and the language menu.
 2. **Normalise**
    - Text: detect the language. Translate to English with Sunbird (`POST https://api.sunbird.ai/tasks/translate`, body `{source_language, target_language, text}`, codes `eng|lug|swa`). Bearer token from `/auth/token` expires every 7 days, so cache and refresh it.
-   - Image: download through Graph API (`GET /{media-id}` → URL → `GET` with bearer). Google Cloud Vision extracts the visible text; the LLM then pulls out any post author/handle/date and the claim. Compute pHash.
+   - Image: download from the `fileMessageData.downloadUrl` in the Green API webhook (HTTPS only). Google Cloud Vision extracts the visible text; the LLM then pulls out any post author/handle/date and the claim. Compute pHash.
    - Run `privacy.redact()` on all text before it leaves for any external API.
    - The LLM extracts **one checkable claim** (prompt `extract.system.md`).
 3. **Quick check (target < 5 s)**
@@ -330,12 +329,12 @@ All stages live in `engine/` as pure functions with injected adapters, so they c
 5. **Assessment** (LLM adapter, `assess.system.md`, temperature 0, strict JSON). See section 9.
 6. **Reply**
    - Build `reply_text` in English, then translate to the user's language with Sunbird. Keep it under 600 characters, with one source link.
-   - Within 24 hours of the user's last message, send a free-form text through `POST https://graph.facebook.com/${GRAPH_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`.
+   - Send a text through Green API: `POST {GREENAPI_URL}/waInstance{GREENAPI_ID_INSTANCE}/sendMessage/{GREENAPI_API_TOKEN_INSTANCE}` with `{chatId: "<digits>@c.us", message}`. Green API has no 24-hour window.
    - For `under_investigation`: "Received. Our check so far suggests [label]. A fact-checker is reviewing it. Ticket #XXXX."
 7. **Newsroom case:** set the claim status to `queued`. Realtime pushes it to the dashboard. If the cluster just crossed the threshold, send the rising-claim email (branded Sherlock HTML template) and log it in `alerts`.
 8. **Publish and feedback** (`publish-verdict.ts`, journalist JWT required)
    - Save the verdict, translate the explanation to Luganda and Kiswahili, and add every claim in the cluster to `outbound_queue`.
-   - For each claim: decrypt the reply address in the function only, send in the user's language, and mark it `sent`. If the last message was more than 24 hours ago, mark it `needs_template`. This needs a Meta-approved utility template, so show the count in the dashboard.
+   - For each claim: decrypt the reply address in the function only, send in the user's language, and mark it `sent`. `needs_template` applies only to providers with a reply window (Meta); with Green API it is not used, but the status is kept for a later move to Meta.
    - Update the cluster status to `published` and add it to the verified library.
 
 **Latency targets:** instant reply in under 30 s for new claims and under 5 s for library hits.
@@ -375,7 +374,7 @@ All stages live in `engine/` as pure functions with injected adapters, so they c
 
 ## 10. Demo script (must work end to end)
 
-1. A judge (on the Meta test number's recipient list, maximum 5) sends a **Luganda** message on WhatsApp claiming that Monday is a public holiday (fictional demo claim).
+1. A judge (one of the chats allowed on the Green API free plan) sends a **Luganda** message on WhatsApp claiming that Monday is a public holiday (fictional demo claim).
 2. Within ~30 s they get a Luganda reply: received, under investigation, ticket number.
 3. On the dashboard, the claim appears live. The presenter presses **Simulate spread (demo)** and the cluster climbs from 1 to 100 with a green ▲. A branded "Rising claim" email reaches the demo journalist inbox.
 4. The demo journalist (fictional: "Demo Reporter, Sample Newsroom") opens the case, reviews the evidence, picks **Likely false**, writes an explanation, adds the fictional ministry notice URL and presses **Publish**.
@@ -403,12 +402,11 @@ SUPABASE_SERVICE_ROLE_KEY=
 PHONE_HASH_SECRET=
 REPLY_ADDRESS_KEY=            # 32 bytes, base64
 
-# WhatsApp Cloud API
-WHATSAPP_PHONE_NUMBER_ID=
-WHATSAPP_ACCESS_TOKEN=
-WHATSAPP_APP_SECRET=
-WHATSAPP_VERIFY_TOKEN=
-GRAPH_API_VERSION=            # set from Meta's dashboard, for example v2x.0
+# WhatsApp through Green API (console.green-api.com)
+GREENAPI_URL=                 # apiUrl shown on your instance, e.g. https://7103.api.greenapi.com
+GREENAPI_ID_INSTANCE=
+GREENAPI_API_TOKEN_INSTANCE=
+GREENAPI_WEBHOOK_TOKEN=       # random string; also set as webhookUrlToken in the console
 
 # AI and search (zero-budget defaults)
 LLM_CHAT_URL=https://api.groq.com/openai/v1/chat/completions
@@ -439,7 +437,7 @@ Work in this order. After each milestone, run the app, take screenshots, fix wha
 3. **Newsroom dashboard:** Overview, Claims database, Claim detail, Library, Sources, Alerts, Settings, Realtime updates, simulate control. *Done when:* simulate drives 1 → 100 with a green arrow, publish moves a case to the library, all live.
 4. **Engine core with fallbacks:** stages 2–6 behind adapters, canned mode, Vitest tests for privacy, cluster, assess-parsing and reply formatting. *Done when:* `/check` returns an assessment for text and an image in demo mode.
 5. **Real adapters:** Sunbird, LLM (Groq), Vision, Fact Check, Brave, scraper. *Done when:* a real English and a real Luganda claim produce cited evidence.
-6. **WhatsApp:** webhook verify, signature check, receive, reply, consent and keywords. *Done when:* the demo script steps 1–2 work on the test number.
+6. **WhatsApp (Green API):** webhook token check, receive, reply, consent and keywords. *Done when:* the demo script steps 1–2 work on the linked demo number.
 7. **Publish loop and email:** stages 7–8, outbound queue, Gmail alert email. *Done when:* demo script steps 3–5 work end to end.
 8. **Polish and rehearsal:** loading and empty states, error toasts, `demo:reset`, Playwright test of the demo script, and a recorded backup video.
 
@@ -457,7 +455,7 @@ Work in this order. After each milestone, run the app, take screenshots, fix wha
 ## 14. Things to ask the team, not guess
 
 - Final logo files (SVG), team photos, the exact source registry list, and the demo claim wording.
-- The Meta test number, phone number ID and the 5 recipient numbers.
+- The Green API instance (ID, API token, apiUrl), the dedicated demo phone number, and which judges' numbers will chat with it.
 - Whether Sunbird has usage costs or limits for the hackathon.
 - Any change to the revenue model or the pricing copy.
 
@@ -468,13 +466,13 @@ Work in this order. After each milestone, run the app, take screenshots, fix wha
 Updated 29 Oct 2026.
 
 **Decisions already made**
-- WhatsApp: Meta's official **test number** for the demo. No Green API. Branded number after business registration and Meta verification.
+- WhatsApp: **Green API** free Developer plan with a dedicated demo number (team decision, 29 Oct 2026; supersedes the earlier Meta test-number decision). Move to Meta's Cloud API with a branded number after business registration.
 - Budget is **zero**. Use free tiers only: Groq for the LLM, Sunbird, Google Fact Check, Google Cloud Vision (free units), Brave (free credit), Supabase, Netlify, Gmail SMTP.
 - Revenue model: citizens free; newsroom subscription; platform and research data licence (aggregated only). No grants for now.
 - Design: `docs/DESIGN.md` (Slack structure) with the logo palette. No gradients. Hero uses `public/hero-journalism.jpg` with a flat dark overlay. The team found the first prototype "too basic": aim for a richer, professional layout using `docs/references/`.
 
 **Accounts ready:** Supabase, Netlify, Sunbird AI, Google Cloud, Brave Search, Gmail.
-**Still pending:** Meta developer app and test number; Gmail app password; Groq API key; Vision API enabled; logo as SVG; team photos; source list; demo claim in Luganda.
+**Still pending:** Green API instance and linked demo phone; Gmail app password; Groq API key; Vision API enabled; logo as SVG; team photos; source list; demo claim in Luganda.
 
 **Code that exists (prototype, to be replaced or extended):**
 - `src/pages/Landing.tsx`: navbar, image hero, three steps, pricing cards, team placeholder, footer.

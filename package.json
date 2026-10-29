@@ -14,7 +14,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "demo:reset": "tsx scripts/demo-reset.ts",
     "e2e": "playwright test",
-    "keys:generate": "tsx scripts/generate-keys.ts"
+    "keys:generate": "tsx scripts/generate-keys.ts",
+    "whatsapp:sim": "tsx scripts/whatsapp-sim.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
