@@ -1,0 +1,92 @@
+// Build engine dependencies from the environment. Each external API falls back to a clearly
+// labelled canned adapter when its key is missing, so the demo never crashes.
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { has, readConfig } from '../config'
+import type { Embedder, Logger } from '../ports'
+import type { PipelineDeps } from '../pipeline'
+import { embedLocal } from '../embed'
+import { memoryStore } from '../memoryStore'
+import { cannedTranslator, sunbirdTranslator } from './sunbird'
+import { cannedLlm, openAiCompatibleLlm } from './llm'
+import { cannedOcr, googleVisionOcr } from './vision'
+import { cannedFactCheck, googleFactCheck } from './factcheck'
+import { braveSearch, cannedWebSearch } from './brave'
+import { cannedWhatsApp, cloudApi, type WhatsApp } from './whatsapp'
+import { cannedMailer, smtpMailer, type Mailer } from './email'
+import { imagePhash } from './phash'
+import { serviceClient, supabaseStore } from './supabaseStore'
+
+type Env = Record<string, string | undefined>
+
+/** Structured JSON logs. Callers must never pass phone numbers, tokens or decrypted addresses. */
+export const jsonLogger: Logger = {
+  info: (event) => console.log(JSON.stringify({ level: 'info', ...event })),
+  error: (event) => console.error(JSON.stringify({ level: 'error', ...event })),
+}
+
+export const localEmbedder: Embedder = {
+  async embed(text) {
+    return embedLocal(text)
+  },
+}
+
+export interface IntegrationStatus {
+  demo_mode: boolean
+  supabase: boolean
+  sunbird: boolean
+  llm: boolean
+  vision: boolean
+  factcheck: boolean
+  brave: boolean
+  whatsapp: boolean
+  email: boolean
+  privacy_keys: boolean
+}
+
+export function integrationStatus(env: Env): IntegrationStatus {
+  return {
+    demo_mode: readConfig(env).demoMode,
+    supabase: has(env, 'VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'),
+    sunbird: has(env, 'SUNBIRD_API_TOKEN') || has(env, 'SUNBIRD_USERNAME', 'SUNBIRD_PASSWORD'),
+    llm: has(env, 'LLM_API_KEY'),
+    vision: has(env, 'GOOGLE_VISION_API_KEY'),
+    factcheck: has(env, 'GOOGLE_FACTCHECK_API_KEY'),
+    brave: has(env, 'BRAVE_SEARCH_API_KEY'),
+    whatsapp: has(env, 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_ACCESS_TOKEN'),
+    email: has(env, 'SMTP_USER', 'SMTP_APP_PASSWORD'),
+    privacy_keys: has(env, 'PHONE_HASH_SECRET', 'REPLY_ADDRESS_KEY'),
+  }
+}
+
+let fallbackStore: ReturnType<typeof memoryStore> | null = null
+
+export interface ServerDeps extends PipelineDeps {
+  db: SupabaseClient | null
+  whatsapp: WhatsApp
+  mailer: Mailer
+  status: IntegrationStatus
+}
+
+export function buildDeps(env: Env = process.env): ServerDeps {
+  const status = integrationStatus(env)
+  const config = readConfig(env)
+  const db = status.supabase ? serviceClient(env.VITE_SUPABASE_URL as string, env.SUPABASE_SERVICE_ROLE_KEY as string) : null
+  if (!db) fallbackStore ??= memoryStore()
+  return {
+    config,
+    status,
+    db,
+    store: db ? supabaseStore(db) : (fallbackStore as ReturnType<typeof memoryStore>),
+    translator: status.sunbird ? sunbirdTranslator(env) : cannedTranslator,
+    llm: status.llm ? openAiCompatibleLlm(env) : cannedLlm,
+    ocr: status.vision ? googleVisionOcr(env.GOOGLE_VISION_API_KEY as string) : cannedOcr,
+    factcheck: status.factcheck ? googleFactCheck(env.GOOGLE_FACTCHECK_API_KEY as string) : cannedFactCheck,
+    web: status.brave ? braveSearch(env.BRAVE_SEARCH_API_KEY as string) : cannedWebSearch,
+    whatsapp: status.whatsapp ? cloudApi(env) : cannedWhatsApp,
+    mailer: status.email ? smtpMailer(env) : cannedMailer,
+    embedder: localEmbedder,
+    hashImage: imagePhash,
+    log: jsonLogger,
+    now: () => new Date(),
+  }
+}
