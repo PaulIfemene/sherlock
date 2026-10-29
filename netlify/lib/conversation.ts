@@ -9,6 +9,8 @@ import { ticketFor } from '../../engine/reply'
 import { sendRisingAlert } from './alerts'
 
 const MEDIA_BUCKET = 'claim-media'
+const HOLDING_MESSAGE_MS = 8000
+const QUICK_TRANSLATE_MS = 5000
 
 async function say(deps: ServerDeps, to: string, english: string, lang: Lang): Promise<void> {
   let text = english
@@ -18,6 +20,16 @@ async function say(deps: ServerDeps, to: string, english: string, lang: Lang): P
     } catch {
       // English is better than silence.
     }
+  }
+  await deps.whatsapp.sendText(to, text)
+}
+
+/** Like say(), but never waits long on translation: falls back to English after a few seconds. */
+async function sayQuick(deps: ServerDeps, to: string, english: string, lang: Lang): Promise<void> {
+  let text = english
+  if (lang !== 'eng') {
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), QUICK_TRANSLATE_MS))
+    text = (await Promise.race([deps.translator.translate(english, 'eng', lang).catch(() => null), timeout])) ?? english
   }
   await deps.whatsapp.sendText(to, text)
 }
@@ -82,7 +94,18 @@ export async function handleWhatsAppMessage(msg: InboundMessage, deps: ServerDep
     return
   }
 
+  // Without OCR a bare screenshot has nothing to check; say so instead of queuing an empty claim.
+  if (msg.mediaRef && !msg.text?.trim() && !deps.ocr.live) {
+    await say(deps, e164, SYSTEM_TEXT.noScreenshots, lang)
+    return
+  }
+
   const claim = await store.createClaim({ channel: 'whatsapp', sender_hash: hash, is_demo: false })
+  // Slow translation or a busy AI can stretch a check past a minute; tell the sender it is still going.
+  let finished = false
+  const holding = setTimeout(() => {
+    if (!finished) sayQuick(deps, e164, `${SYSTEM_TEXT.stillChecking} Ticket #${ticketFor(claim.id)}.`, lang).catch(() => {})
+  }, HOLDING_MESSAGE_MS)
   try {
     let image: Uint8Array | null = null
     if (msg.mediaRef) {
@@ -98,6 +121,8 @@ export async function handleWhatsAppMessage(msg: InboundMessage, deps: ServerDep
       { claimId: claim.id, text: msg.text, image, languageHint: null, replyLanguage: sender?.language_pref ?? null, isDemo: false },
       pipelineDeps(deps, origin),
     )
+    finished = true
+    clearTimeout(holding)
     if (!sender?.language_pref) await store.upsertSender({ sender_hash: hash, language_pref: result.replyLanguage })
     await deps.whatsapp.sendText(e164, result.reply)
     await store.addEvent({
@@ -107,6 +132,8 @@ export async function handleWhatsAppMessage(msg: InboundMessage, deps: ServerDep
       detail: `${deps.whatsapp.live ? 'Reply sent' : 'Reply simulated (WhatsApp not configured)'} on WhatsApp in ${result.replyLanguage}.`,
     })
   } catch (err) {
+    finished = true
+    clearTimeout(holding)
     log.error({ stage: 'pipeline', claim_id: claim.id, message: (err as Error).message })
     await store.updateClaim(claim.id, { progress: 'failed', status: 'queued' })
     await say(deps, e164, `Received. Something went wrong while checking, so a fact-checker will review it by hand. Ticket #${ticketFor(claim.id)}.`, lang)

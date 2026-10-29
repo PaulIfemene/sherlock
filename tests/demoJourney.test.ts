@@ -154,3 +154,14 @@ describe('demo script, end to end', () => {
     expect(store.state.alerts[0]).toMatchObject({ delivery: 'failed', error: expect.stringMatching(/no recipients/) })
   })
 })
+
+describe('screenshots without OCR', () => {
+  it('asks for the text instead of queuing an empty claim', async () => {
+    const { deps, store, sent } = setup()
+    await handleWhatsAppMessage(message(JUDGE, 'Hi Sherlock'), deps, 'http://localhost')
+    const before = sent.length
+    await handleWhatsAppMessage({ ...message(JUDGE, ''), text: null, type: 'image', mediaRef: 'https://media.example/x.jpg', mimeType: 'image/jpeg' }, deps, 'http://localhost')
+    expect(sent.slice(before).map((m) => m.body)).toEqual([expect.stringMatching(/cannot read screenshots yet/)])
+    expect(store.state.claims.size).toBe(0)
+  })
+})

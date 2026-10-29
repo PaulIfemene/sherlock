@@ -35,7 +35,8 @@ export interface Normalised {
 export async function normaliseText(raw: string, translator: Translator, hint: Lang | null, log: Logger): Promise<Normalised> {
   const original_text = redact(raw)
   let lang: Lang = hint ?? 'eng'
-  if (!hint) {
+  // Sunbird rejects very short text; nothing to detect from anyway.
+  if (!hint && original_text.trim().length >= 3) {
     try {
       lang = (await translator.detect(original_text)) ?? guessLanguage(original_text)
     } catch (err) {

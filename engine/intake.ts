@@ -37,6 +37,8 @@ export const SYSTEM_TEXT = {
   started: 'Welcome back. Send a message you want checked.',
   deleted: 'Your Sherlock data has been erased. Any new message starts fresh.',
   unsupported: 'Sherlock can check text and images for now. Please send the message as text or a screenshot.',
+  noScreenshots: 'Sherlock cannot read screenshots yet. Please type or paste the text of the message you want checked.',
+  stillChecking: 'Still checking, this can take up to a minute.',
 } as const
 
 export const LANGUAGE_SET_TEXT: Record<Lang, string> = {

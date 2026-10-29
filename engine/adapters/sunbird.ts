@@ -50,7 +50,8 @@ export function sunbirdTranslator(env: SunbirdEnv): Translator {
         method: 'POST',
         headers: await auth(),
         body: JSON.stringify({ text: text.slice(0, 500) }),
-        timeoutMs: 15000,
+        // Language ID is optional (a local guess backs it up), so never wait long for it.
+        timeoutMs: 8000,
       })
       const lang = z.object({ language: z.string() }).safeParse(json)
       const code = lang.success ? lang.data.language.toLowerCase() : ''
@@ -62,9 +63,9 @@ export function sunbirdTranslator(env: SunbirdEnv): Translator {
         method: 'POST',
         headers: await auth(),
         body: JSON.stringify({ source_language: from, target_language: to, text }),
-        // Warm calls take 2-3 s; a cold model can take ~35 s. Translation is idempotent, so retry once.
-        timeoutMs: 60000,
-        retries: 1,
+        // Warm calls take 2-3 s, a cold model ~35 s. Cap the wait so a reply never stalls for minutes;
+        // on failure the sender gets English with a note.
+        timeoutMs: 40000,
       })
       return readTranslation(json)
     },
