@@ -48,7 +48,8 @@ export function isInternal(req: Request): boolean {
 
 /** Fire the background processor. Netlify answers 202 straight away. */
 export async function triggerBackground(origin: string, payload: unknown): Promise<void> {
-  const res = await fetch(`${origin}/.netlify/functions/process-message-background`, {
+  const base = process.env.INTERNAL_BASE_URL || origin
+  const res = await fetch(`${base}/.netlify/functions/process-message-background`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-sherlock-internal': internalSecret() },
     body: JSON.stringify(payload),

@@ -28,3 +28,4 @@ dist-ssr
 .netlify
 test-results
 playwright-report
+.tools

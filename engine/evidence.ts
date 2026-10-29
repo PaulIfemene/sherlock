@@ -40,6 +40,13 @@ export function numberEvidence(groups: Omit<Evidence, 'id'>[][], max = 10): Evid
   return out
 }
 
+const REGION = /\b(uganda|ugandan|kampala|kenya|kenyan|nairobi|tanzania|tanzanian|rwanda|burundi|south sudan|east africa|eac)\b/i
+
+/** Claims forwarded in Uganda rarely name the country; without it, web search drifts abroad. */
+export function searchQuery(claimEn: string): string {
+  return REGION.test(claimEn) ? claimEn : `${claimEn} Uganda`
+}
+
 export interface EvidenceQuery {
   claimEn: string
   embedding: number[]
@@ -78,9 +85,9 @@ export async function gatherEvidence(q: EvidenceQuery, deps: Pick<Deps, 'store' 
 
   const [official, factcheck, image, web] = await Promise.all([
     run('official', () => deps.store.matchSourceItems(q.embedding, 4)),
-    run('factcheck', () => deps.factcheck.search(q.claimEn)),
+    run('factcheck', () => deps.factcheck.search(searchQuery(q.claimEn))),
     run('image', imageMatches),
-    run('web', () => deps.web.search(q.claimEn)),
+    run('web', () => deps.web.search(searchQuery(q.claimEn))),
   ])
   return numberEvidence([official, factcheck, image, web.slice(0, 4)])
 }

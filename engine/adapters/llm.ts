@@ -11,8 +11,8 @@ interface LlmEnv {
 }
 
 export const DEFAULT_LLM_URL = 'https://api.groq.com/openai/v1/chat/completions'
-// Check Groq's model list before the demo; override with LLM_MODEL.
-export const DEFAULT_LLM_MODEL = 'llama-3.3-70b-versatile'
+// From Groq's model list on 29 Oct 2026 (Llama 3.3 70B is no longer offered). Override with LLM_MODEL.
+export const DEFAULT_LLM_MODEL = 'openai/gpt-oss-120b'
 
 const ChatResponse = z.object({
   choices: z.array(z.object({ message: z.object({ content: z.string().nullable() }) })).min(1),
@@ -34,6 +34,8 @@ export function openAiCompatibleLlm(env: LlmEnv): ChatLLM {
         ],
       }
       if (json) body.response_format = { type: 'json_object' }
+      // gpt-oss models reason before answering; low effort keeps latency and token use down.
+      if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low'
       const res = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.LLM_API_KEY}`, 'Content-Type': 'application/json' },

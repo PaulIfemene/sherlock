@@ -81,7 +81,7 @@ export async function extractClaim(textEn: string, ocrText: string | null, llm: 
   const fallback: Extracted = { claim: firstSentence(textEn || ocrText || ''), checkable: true, post_author: null, post_date: null }
   if (!llm.live || !source.trim()) return fallback
   try {
-    const raw = await llm.complete({ system: loadPrompt('extract.system.md'), user: redact(source), json: true, maxTokens: 250 })
+    const raw = await llm.complete({ system: loadPrompt('extract.system.md'), user: redact(source), json: true, maxTokens: 700 })
     const start = raw.indexOf('{')
     const parsed = ExtractSchema.safeParse(JSON.parse(raw.slice(start, raw.lastIndexOf('}') + 1)))
     if (!parsed.success || !parsed.data.claim.trim()) return fallback

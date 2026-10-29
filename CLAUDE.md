@@ -72,7 +72,7 @@ Sherlock never claims to know intent. Intent is inferred from patterns (forgery,
 | Database | Supabase: Postgres, `pgvector`, Realtime (live dashboard), Auth (magic-link login for journalists), RLS |
 | WhatsApp | Green API (free Developer plan) with a dedicated demo number. Adapter: `engine/adapters/greenapi.ts` |
 | Translation and speech | Sunbird AI API |
-| LLM | **Zero budget:** one OpenAI-compatible chat adapter configured by env (`LLM_CHAT_URL`, `LLM_API_KEY`, `LLM_MODEL`). Default: **Groq free tier** (`https://api.groq.com/openai/v1/chat/completions`, a Llama 70B-class model; check Groq's model list). Optional: Sunbird Sunflower (`https://api.sunbird.ai/tasks/chat/completions`, `sunflower-14b`) for Luganda-native wording. Claude can be swapped in later when funded |
+| LLM | **Zero budget:** one OpenAI-compatible chat adapter configured by env (`LLM_CHAT_URL`, `LLM_API_KEY`, `LLM_MODEL`). Default: **Groq free tier** (`https://api.groq.com/openai/v1/chat/completions`, `openai/gpt-oss-120b` as of 29 Oct 2026; check Groq's model list). Optional: Sunbird Sunflower (`https://api.sunbird.ai/tasks/chat/completions`, `sunflower-14b`) for Luganda-native wording. Claude can be swapped in later when funded |
 | OCR (screenshots) | Google Cloud Vision `TEXT_DETECTION` (first 1,000 units a month free; needs the Vision API enabled on the Google Cloud project) |
 | Fact-check archive | Google Fact Check Tools API |
 | Web search | Brave Search API (attribution required on the site) |

@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { has, readConfig } from '../config'
-import type { Embedder, Logger } from '../ports'
+import type { Embedder, EvidenceSearch, Logger } from '../ports'
 import type { PipelineDeps } from '../pipeline'
 import { embedLocal } from '../embed'
 import { memoryStore } from '../memoryStore'
@@ -23,6 +23,13 @@ type Env = Record<string, string | undefined>
 export const jsonLogger: Logger = {
   info: (event) => console.log(JSON.stringify({ level: 'info', ...event })),
   error: (event) => console.error(JSON.stringify({ level: 'error', ...event })),
+}
+
+const noEvidence: EvidenceSearch = {
+  live: false,
+  async search() {
+    return []
+  },
 }
 
 export const localEmbedder: Embedder = {
@@ -82,6 +89,7 @@ export function buildDeps(env: Env = process.env): ServerDeps {
     if (!warnedEphemeral) jsonLogger.error({ stage: 'config', event: 'ephemeral_privacy_keys', message: 'PHONE_HASH_SECRET or REPLY_ADDRESS_KEY missing; using random demo keys for this process' })
     warnedEphemeral = true
   }
+  const liveEvidence = status.brave || status.factcheck
   const db = status.supabase ? serviceClient(env.VITE_SUPABASE_URL as string, env.SUPABASE_SERVICE_ROLE_KEY as string) : null
   if (!db) fallbackStore ??= memoryStore()
   return {
@@ -92,8 +100,10 @@ export function buildDeps(env: Env = process.env): ServerDeps {
     translator: status.sunbird ? sunbirdTranslator(env) : cannedTranslator,
     llm: status.llm ? openAiCompatibleLlm(env) : cannedLlm,
     ocr: status.vision ? googleVisionOcr(env.GOOGLE_VISION_API_KEY as string) : cannedOcr,
-    factcheck: status.factcheck ? googleFactCheck(env.GOOGLE_FACTCHECK_API_KEY as string) : cannedFactCheck,
-    web: status.brave ? braveSearch(env.BRAVE_SEARCH_API_KEY as string) : cannedWebSearch,
+    // Simulated evidence only when no live search is configured at all. Once any real source is
+    // live, a missing one contributes nothing rather than mixing simulated items into real checks.
+    factcheck: status.factcheck ? googleFactCheck(env.GOOGLE_FACTCHECK_API_KEY as string) : liveEvidence ? noEvidence : cannedFactCheck,
+    web: status.brave ? braveSearch(env.BRAVE_SEARCH_API_KEY as string) : liveEvidence ? noEvidence : cannedWebSearch,
     whatsapp: status.whatsapp ? greenApi(env) : cannedWhatsApp,
     mailer: status.email ? smtpMailer(env) : cannedMailer,
     embedder: localEmbedder,

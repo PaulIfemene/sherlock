@@ -109,7 +109,8 @@ export async function assess(input: AssessInput, llm: ChatLLM, log: Logger): Pro
   const user = buildAssessUser(input)
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const raw = await llm.complete({ system, user, json: true, maxTokens: 600 })
+      // Headroom for reasoning models (gpt-oss) that think before writing the JSON.
+      const raw = await llm.complete({ system, user, json: true, maxTokens: 1200 })
       const result = parseAssessment(raw, input.evidence)
       if (result) return result
       log.info({ stage: 'assess', event: 'parse_failure', attempt })

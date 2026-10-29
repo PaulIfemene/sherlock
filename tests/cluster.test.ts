@@ -82,3 +82,12 @@ describe('pHash', () => {
     expect(hamming(a, phashFromGrey(other))).toBeGreaterThan(10)
   })
 })
+
+describe('searchQuery', () => {
+  it('adds Uganda only when the claim names no East African place', async () => {
+    const { searchQuery } = await import('../engine/evidence')
+    expect(searchQuery('Monday is a public holiday')).toBe('Monday is a public holiday Uganda')
+    expect(searchQuery('Kampala schools close on Friday')).toBe('Kampala schools close on Friday')
+    expect(searchQuery('Kenya raises fuel prices')).toBe('Kenya raises fuel prices')
+  })
+})
