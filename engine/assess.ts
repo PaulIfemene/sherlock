@@ -17,11 +17,12 @@ export interface AssessInput {
 const AssessmentSchema = z.object({
   label: z.enum(AI_LABELS),
   confidence: z.coerce.number().min(0).max(1),
-  evidence_ids: z.array(z.string()).default([]),
+  // Models sometimes send null for optional fields; treat null as empty.
+  evidence_ids: z.array(z.string()).nullish().transform((v) => v ?? []),
   disorder_hint: z.enum(DISORDERS).catch('unknown'),
-  rationale: z.string().default(''),
+  rationale: z.string().nullish().transform((v) => v ?? ''),
   reply_text: z.string().min(1),
-  missing_evidence: z.string().default(''),
+  missing_evidence: z.string().nullish().transform((v) => v ?? ''),
 })
 
 const BANNED = /\b(fake|lie|lies|lying|liar|hoax(es)?)\b/gi

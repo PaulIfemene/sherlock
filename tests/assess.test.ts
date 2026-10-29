@@ -137,3 +137,10 @@ describe('LLM rate-limit fallback', () => {
     }
   })
 })
+
+describe('null optional fields', () => {
+  it('treats null rationale, evidence_ids and missing_evidence as empty', () => {
+    const raw = JSON.stringify({ label: 'likely_false', confidence: 0.8, evidence_ids: ['e1'], disorder_hint: null, rationale: null, reply_text: 'The evidence we found suggests otherwise.', missing_evidence: null })
+    expect(parseAssessment(raw, evidence)).toMatchObject({ label: 'likely_false', rationale: '', missing_evidence: '' })
+  })
+})
