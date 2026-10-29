@@ -138,7 +138,7 @@ export function cannedAssessment(input: AssessInput): Assessment {
       evidence_ids: [falseCheck.id],
       disorder_hint: 'unknown',
       rationale: `Demo assessment (no LLM key configured): a published fact-check rates a similar claim as false.`,
-      reply_text: 'The evidence we found suggests this claim is not accurate: a published fact-check rates a similar claim as false. A journalist will confirm.',
+      reply_text: 'The evidence we found suggests this claim is not accurate: a published fact-check rates a similar claim as false.',
       missing_evidence: 'An official statement on the specific claim.',
       fallback: 'no_llm',
     }
