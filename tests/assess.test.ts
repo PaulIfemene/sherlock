@@ -101,3 +101,39 @@ describe('needsJournalist', () => {
     expect(needsJournalist({ ...base, label: 'unverified', confidence: 0.9 }, 0.75)).toBe(true)
   })
 })
+
+describe('format drift from the model', () => {
+  it('accepts spaced labels, numeric ids and percentage confidence', async () => {
+    const { parseAssessmentDetailed } = await import('../engine/assess')
+    const raw = JSON.stringify({ label: 'Likely False', confidence: '82%', evidence_ids: [1], reply_text: 'The evidence we found suggests otherwise.' })
+    const r = parseAssessmentDetailed(raw, evidence)
+    expect(r.assessment).toMatchObject({ label: 'likely_false', confidence: 0.82, evidence_ids: ['e1'] })
+  })
+
+  it('explains rejections without echoing content', async () => {
+    const { parseAssessmentDetailed } = await import('../engine/assess')
+    expect(parseAssessmentDetailed('', evidence).reason).toBe('empty reply')
+    expect(parseAssessmentDetailed('{"label":"maybe","reply_text":"x","confidence":0.5}', evidence).reason).toMatch(/^label:/)
+  })
+})
+
+describe('LLM rate-limit fallback', () => {
+  it('retries once on the smaller model after a 429', async () => {
+    const { openAiCompatibleLlm } = await import('../engine/adapters/llm')
+    const models: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      const model = JSON.parse(String(init.body)).model as string
+      models.push(model)
+      if (model === 'openai/gpt-oss-120b') return new Response('{}', { status: 429 })
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }), { status: 200 })
+    }) as typeof fetch
+    try {
+      const out = await openAiCompatibleLlm({ LLM_API_KEY: 'k' }).complete({ system: 's', user: 'u', json: true })
+      expect(out).toBe('{"ok":true}')
+      expect(models).toEqual(['openai/gpt-oss-120b', 'openai/gpt-oss-20b'])
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+})

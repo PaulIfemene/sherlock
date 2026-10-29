@@ -125,7 +125,7 @@ export async function runPipeline(input: PipelineInput, deps: PipelineDeps): Pro
     const imageContext = ocrText
       ? [ocrText, extracted.post_author && `Post author: ${extracted.post_author}`, extracted.post_date && `Post date: ${extracted.post_date}`].filter(Boolean).join('\n')
       : undefined
-    assessment = await assess({ claim_en: claimEn, original_language: norm.original_language, evidence, image_context: imageContext }, deps.llm, log)
+    assessment = await assess({ claim_en: claimEn, original_language: norm.original_language, evidence, image_context: imageContext, today: deps.now().toISOString().slice(0, 10) }, deps.llm, log)
   }
 
   // 6 Reply -----------------------------------------------------------------------------------

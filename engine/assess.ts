@@ -10,6 +10,8 @@ export interface AssessInput {
   original_language: Lang
   evidence: Evidence[]
   image_context?: string
+  /** YYYY-MM-DD, so the model can tell old evidence from claims about "next Monday". */
+  today?: string
 }
 
 const AssessmentSchema = z.object({
@@ -62,20 +64,47 @@ function extractJson(raw: string): unknown {
 }
 
 /**
+ * Smooth over harmless format drift from the model before validation: "Likely False" or
+ * "missing context" labels, numeric evidence IDs (1 -> e1), and "82%" confidences.
+ */
+export function normaliseAssessmentJson(json: unknown): unknown {
+  if (!json || typeof json !== 'object') return json
+  const o = { ...(json as Record<string, unknown>) }
+  if (typeof o.label === 'string') o.label = o.label.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (Array.isArray(o.evidence_ids)) o.evidence_ids = o.evidence_ids.map((id) => (typeof id === 'number' ? `e${id}` : String(id).trim()))
+  if (typeof o.confidence === 'string' && o.confidence.trim().endsWith('%')) o.confidence = Number(o.confidence.replace('%', '')) / 100
+  if (typeof o.confidence === 'number' && o.confidence > 1 && o.confidence <= 100) o.confidence = o.confidence / 100
+  return o
+}
+
+export type ParseOutcome = { assessment: Assessment; reason: null } | { assessment: null; reason: string }
+
+/** Like parseAssessment, but says why a reply was rejected (for logs; contains no claim text). */
+export function parseAssessmentDetailed(raw: string, evidence: Evidence[]): ParseOutcome {
+  if (!raw.trim()) return { assessment: null, reason: 'empty reply' }
+  let json: unknown
+  try {
+    json = extractJson(raw)
+  } catch (err) {
+    return { assessment: null, reason: `not JSON (${(err as Error).message.slice(0, 60)}), ${raw.length} chars` }
+  }
+  const parsed = AssessmentSchema.safeParse(normaliseAssessmentJson(json))
+  if (!parsed.success) {
+    return { assessment: null, reason: parsed.error.issues.map((i) => `${i.path.join('.') || 'root'}: ${i.message}`).join('; ').slice(0, 200) }
+  }
+  return { assessment: police(parsed.data, evidence), reason: null }
+}
+
+/**
  * Parse and police an LLM reply. Returns null when it is not valid JSON in the contract shape.
  * Rules enforced here: cited IDs must exist; no IDs means under_investigation; banned words removed;
  * reply under 400 characters.
  */
 export function parseAssessment(raw: string, evidence: Evidence[]): Assessment | null {
-  let json: unknown
-  try {
-    json = extractJson(raw)
-  } catch {
-    return null
-  }
-  const parsed = AssessmentSchema.safeParse(json)
-  if (!parsed.success) return null
-  const a = parsed.data
+  return parseAssessmentDetailed(raw, evidence).assessment
+}
+
+function police(a: z.infer<typeof AssessmentSchema>, evidence: Evidence[]): Assessment {
   const known = new Set(evidence.map((e) => e.id))
   const evidence_ids = [...new Set(a.evidence_ids.filter((id) => known.has(id)))]
   if (evidence_ids.length === 0) {
@@ -98,6 +127,7 @@ export function buildAssessUser(input: AssessInput): string {
     original_language: input.original_language,
     evidence: input.evidence.map(({ id, kind, title, url, snippet, published_at }) => ({ id, kind, title, url, snippet, published_at })),
     image_context: input.image_context ?? null,
+    today: input.today ?? null,
   })
 }
 
@@ -111,9 +141,9 @@ export async function assess(input: AssessInput, llm: ChatLLM, log: Logger): Pro
     try {
       // Headroom for reasoning models (gpt-oss) that think before writing the JSON.
       const raw = await llm.complete({ system, user, json: true, maxTokens: 1200 })
-      const result = parseAssessment(raw, input.evidence)
-      if (result) return result
-      log.info({ stage: 'assess', event: 'parse_failure', attempt })
+      const { assessment, reason } = parseAssessmentDetailed(raw, input.evidence)
+      if (assessment) return assessment
+      log.info({ stage: 'assess', event: 'parse_failure', attempt, reason })
     } catch (err) {
       if (err instanceof LlmRateLimitError) {
         return underInvestigation('rate_limited', 'The free LLM tier hit its request cap, so this claim went straight to a journalist.')
