@@ -20,7 +20,7 @@
     "check:services": "tsx scripts/check-services.ts",
     "check:claim": "tsx scripts/check-claim.ts",
     "greenapi:webhook": "tsx scripts/greenapi-webhook.ts",
-    "tunnel": "node -e \"const fs=require('fs');const exe=fs.existsSync('.tools/cloudflared.exe')?'.tools/cloudflared.exe':'cloudflared';require('child_process').spawn(exe,['tunnel','--url','http://localhost:5173'],{stdio:'inherit'})\""
+    "tunnel": "node scripts/tunnel.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

@@ -1,7 +1,7 @@
 // Stage 1 intake for Green API. Check the webhook token, answer 200 fast, and hand user messages
 // to process-message-background. Point the Green API console's webhook URL here.
 import { jsonLogger } from '../../engine/adapters'
-import { parseIncoming, verifyWebhookToken } from '../../engine/adapters/greenapi'
+import { parseIncoming, senderAllowed, verifyWebhookToken } from '../../engine/adapters/greenapi'
 import { isLocal, siteOrigin, triggerBackground } from '../lib/http'
 
 export default async (req: Request): Promise<Response> => {
@@ -20,7 +20,13 @@ export default async (req: Request): Promise<Response> => {
     return new Response('Bad JSON', { status: 400 })
   }
   // Our own outgoing messages, delivery statuses and state changes need no answer.
-  if (parseIncoming(body)) {
+  const msg = parseIncoming(body)
+  if (msg && !senderAllowed(msg.from, process.env.WHATSAPP_ALLOWED_NUMBERS)) {
+    // Not on the allowlist: do not process or reply. Never log the number.
+    jsonLogger.info({ stage: 'intake', event: 'ignored_not_allowlisted' })
+    return new Response('OK', { status: 200 })
+  }
+  if (msg) {
     try {
       await triggerBackground(siteOrigin(req), { source: 'whatsapp', payload: body })
     } catch (err) {

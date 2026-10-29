@@ -90,6 +90,21 @@ export function parseIncoming(body: unknown): InboundMessage | null {
   }
 }
 
+/**
+ * Optional allowlist, for when the linked phone is also used for other chats. When
+ * WHATSAPP_ALLOWED_NUMBERS is defined, only those senders (comma-separated digits) are answered;
+ * defined but empty means nobody. Undefined means everyone (a dedicated bot number).
+ */
+export function senderAllowed(from: string, allowed: string | undefined): boolean {
+  if (allowed === undefined) return true
+  const digits = from.replace(/\D/g, '')
+  return allowed
+    .split(',')
+    .map((n) => n.replace(/\D/g, ''))
+    .filter(Boolean)
+    .includes(digits)
+}
+
 // Sending -------------------------------------------------------------------------------------
 
 export function chatIdFor(phone: string): string {

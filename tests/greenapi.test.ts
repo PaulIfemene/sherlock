@@ -60,3 +60,13 @@ describe('sending helpers', () => {
     expect(JSON.stringify(last)).not.toContain('700000001')
   })
 })
+
+describe('senderAllowed', () => {
+  it('answers everyone when unset, nobody when empty, listed numbers otherwise', async () => {
+    const { senderAllowed } = await import('../engine/adapters/greenapi')
+    expect(senderAllowed('256700000001', undefined)).toBe(true)
+    expect(senderAllowed('256700000001', '')).toBe(false)
+    expect(senderAllowed('256700000001', '+256 700 000 001, 256700000002')).toBe(true)
+    expect(senderAllowed('256700000003', '256700000001,256700000002')).toBe(false)
+  })
+})
