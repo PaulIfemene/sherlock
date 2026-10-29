@@ -21,6 +21,9 @@ export default async (req: Request): Promise<Response> => {
   }
   // Our own outgoing messages, delivery statuses and state changes need no answer.
   const msg = parseIncoming(body)
+  // Delivery trace: event type and chat kind only, never the number or text.
+  const typeWebhook = (body as { typeWebhook?: unknown })?.typeWebhook
+  jsonLogger.info({ stage: 'intake', event: 'webhook', type: typeof typeWebhook === 'string' ? typeWebhook : 'unknown', user_message: Boolean(msg) })
   if (msg && !senderAllowed(msg.from, process.env.WHATSAPP_ALLOWED_NUMBERS)) {
     // Not on the allowlist: do not process or reply. Never log the number.
     jsonLogger.info({ stage: 'intake', event: 'ignored_not_allowlisted' })
