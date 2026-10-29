@@ -1,3 +1,4 @@
+import { lazy, Suspense, type ComponentType } from 'react'
 import { createBrowserRouter } from 'react-router'
 import { PublicLayout } from './App'
 import Landing from './pages/Landing'
@@ -6,15 +7,16 @@ import Pricing from './pages/Pricing'
 import Team from './pages/Team'
 import { Privacy, Terms } from './pages/Legal'
 import NotFound from './pages/NotFound'
-import NewsroomLayout from './pages/newsroom/Layout'
-import Login from './pages/newsroom/Login'
-import Overview from './pages/newsroom/Overview'
-import Claims from './pages/newsroom/Claims'
-import ClaimDetail from './pages/newsroom/ClaimDetail'
-import Library from './pages/newsroom/Library'
-import Sources from './pages/newsroom/Sources'
-import Alerts from './pages/newsroom/Alerts'
-import Settings from './pages/newsroom/Settings'
+
+// The newsroom (charts, Supabase client, Realtime) loads only when a journalist opens it.
+function page(load: () => Promise<{ default: ComponentType }>) {
+  const Component = lazy(load)
+  return (
+    <Suspense fallback={<p className="p-8 text-ink-mute">Loading…</p>}>
+      <Component />
+    </Suspense>
+  )
+}
 
 export const router = createBrowserRouter([
   {
@@ -29,18 +31,18 @@ export const router = createBrowserRouter([
       { path: '*', element: <NotFound /> },
     ],
   },
-  { path: '/newsroom/login', element: <Login /> },
+  { path: '/newsroom/login', element: page(() => import('./pages/newsroom/Login')) },
   {
     path: '/newsroom',
-    element: <NewsroomLayout />,
+    element: page(() => import('./pages/newsroom/Layout')),
     children: [
-      { index: true, element: <Overview /> },
-      { path: 'claims', element: <Claims /> },
-      { path: 'claims/:id', element: <ClaimDetail /> },
-      { path: 'library', element: <Library /> },
-      { path: 'sources', element: <Sources /> },
-      { path: 'alerts', element: <Alerts /> },
-      { path: 'settings', element: <Settings /> },
+      { index: true, element: page(() => import('./pages/newsroom/Overview')) },
+      { path: 'claims', element: page(() => import('./pages/newsroom/Claims')) },
+      { path: 'claims/:id', element: page(() => import('./pages/newsroom/ClaimDetail')) },
+      { path: 'library', element: page(() => import('./pages/newsroom/Library')) },
+      { path: 'sources', element: page(() => import('./pages/newsroom/Sources')) },
+      { path: 'alerts', element: page(() => import('./pages/newsroom/Alerts')) },
+      { path: 'settings', element: page(() => import('./pages/newsroom/Settings')) },
     ],
   },
 ])

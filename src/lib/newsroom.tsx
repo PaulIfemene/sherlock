@@ -208,6 +208,7 @@ export function NewsroomProvider({ journalist, children }: { journalist: Journal
       if (supabase) return api.simulate(clusterId, target)
       // Offline: same ease-in climb, all counted as simulated.
       const start = clusters.find((c) => c.id === clusterId)?.report_count ?? 0
+      if (start >= target) return { from: start, to: start }
       let current = start
       for (let i = 1; i <= 12; i++) {
         const next = Math.round(start + (target - start) * (i / 12) ** 1.6)

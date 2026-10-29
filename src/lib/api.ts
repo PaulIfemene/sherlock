@@ -1,5 +1,4 @@
 // Calls to the Netlify Functions. Journalist calls carry the Supabase session token.
-import { supabase } from './supabase'
 
 export class ApiError extends Error {
   readonly status: number
@@ -12,8 +11,10 @@ export class ApiError extends Error {
 async function call<T>(name: string, init: RequestInit & { auth?: boolean } = {}): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
-  if (init.auth && supabase) {
-    const { data } = await supabase.auth.getSession()
+  if (init.auth) {
+    // Loaded on demand so the public site does not ship the Supabase client.
+    const { supabase } = await import('./supabase')
+    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } }
     if (data.session) headers.set('Authorization', `Bearer ${data.session.access_token}`)
   }
   let res: Response
