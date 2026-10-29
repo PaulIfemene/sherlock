@@ -15,7 +15,8 @@
     "demo:reset": "tsx scripts/demo-reset.ts",
     "e2e": "playwright test",
     "keys:generate": "tsx scripts/generate-keys.ts",
-    "whatsapp:sim": "tsx scripts/whatsapp-sim.ts"
+    "whatsapp:sim": "tsx scripts/whatsapp-sim.ts",
+    "email:test": "tsx scripts/email-test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

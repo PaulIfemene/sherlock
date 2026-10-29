@@ -124,5 +124,45 @@ export function supabaseStore(db: SupabaseClient): Store {
     async addEvent(event) {
       must(await db.from('events').insert(event), 'addEvent')
     },
+
+    async getCluster(id) {
+      return must(await db.from('clusters').select('id,canonical_text_en,report_count,simulated_reports,first_seen,last_seen,status,is_demo').eq('id', id).maybeSingle(), 'getCluster') as ClusterRow | null
+    },
+    async saveVerdict(verdict) {
+      return must(await db.from('verdicts').upsert(verdict, { onConflict: 'cluster_id' }).select('*').single(), 'saveVerdict') as VerdictRow
+    },
+    async setClusterStatus(id, status) {
+      must(await db.from('clusters').update({ status }).eq('id', id), 'setClusterStatus')
+    },
+    async claimsInCluster(clusterId) {
+      return must(
+        await db.from('claims').select('id,sender_hash,channel,is_demo,original_language,received_at').eq('cluster_id', clusterId).order('received_at', { ascending: true }),
+        'claimsInCluster',
+      ) as Awaited<ReturnType<Store['claimsInCluster']>>
+    },
+    async setClusterClaimsStatus(clusterId, status) {
+      must(await db.from('claims').update({ status }).eq('cluster_id', clusterId), 'setClusterClaimsStatus')
+    },
+    async enqueueOutbound(claimIds) {
+      if (claimIds.length === 0) return []
+      return must(await db.from('outbound_queue').insert(claimIds.map((claim_id) => ({ claim_id }))).select('id,claim_id'), 'enqueueOutbound') as { id: string; claim_id: string }[]
+    },
+    async markOutbound(id, status, lastError) {
+      must(await db.from('outbound_queue').update({ status, last_error: lastError, attempts: 1, updated_at: new Date().toISOString() }).eq('id', id), 'markOutbound')
+    },
+
+    async alertRecipients() {
+      const [journalists, extra] = await Promise.all([
+        db.from('journalists').select('email').eq('receives_alerts', true),
+        db.from('settings').select('value').eq('key', 'alert_emails').maybeSingle(),
+      ])
+      const fromJournalists = (must(journalists, 'alertRecipients') as { email: string }[]).map((j) => j.email)
+      const value = (must(extra, 'alertRecipients settings') as { value: unknown } | null)?.value
+      const fromSettings = Array.isArray(value) ? value.filter((e): e is string => typeof e === 'string') : []
+      return [...new Set([...fromJournalists, ...fromSettings])]
+    },
+    async logAlert(alert) {
+      must(await db.from('alerts').insert(alert), 'logAlert')
+    },
   }
 }

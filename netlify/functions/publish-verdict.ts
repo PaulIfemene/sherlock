@@ -4,6 +4,7 @@ import { buildDeps } from '../../engine/adapters'
 import { AI_LABELS } from '../../engine/types'
 import { error, json, requireJournalist } from '../lib/http'
 import { publishVerdict } from '../lib/publish'
+import { applySettings } from '../lib/settings'
 
 const Body = z.object({
   cluster_id: z.string().uuid(),
@@ -16,7 +17,7 @@ const Body = z.object({
 
 export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return error(405, 'Method not allowed')
-  const deps = buildDeps()
+  const deps = await applySettings(buildDeps())
   const journalist = await requireJournalist(req, deps.db)
   if (journalist instanceof Response) return journalist
   const parsed = Body.safeParse(await req.json().catch(() => null))

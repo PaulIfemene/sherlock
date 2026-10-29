@@ -91,7 +91,22 @@ export interface Store {
   claimsWithPhash(limit: number): Promise<Pick<ClaimRow, 'id' | 'image_phash' | 'text_en' | 'received_at' | 'cluster_id'>[]>
 
   addEvent(event: { cluster_id?: string | null; claim_id?: string | null; kind: string; detail: string; actor?: string }): Promise<void>
+
+  // Publishing and feedback (stage 8).
+  getCluster(id: string): Promise<ClusterRow | null>
+  saveVerdict(verdict: Omit<VerdictRow, 'id'>): Promise<VerdictRow>
+  setClusterStatus(id: string, status: ClusterRow['status']): Promise<void>
+  claimsInCluster(clusterId: string): Promise<Pick<ClaimRow, 'id' | 'sender_hash' | 'channel' | 'is_demo' | 'original_language' | 'received_at'>[]>
+  setClusterClaimsStatus(clusterId: string, status: ClaimRow['status']): Promise<void>
+  enqueueOutbound(claimIds: string[]): Promise<{ id: string; claim_id: string }[]>
+  markOutbound(id: string, status: OutboundStatus, lastError: string | null): Promise<void>
+
+  // Rising-claim alerts (stage 7).
+  alertRecipients(): Promise<string[]>
+  logAlert(alert: { cluster_id: string; sent_to: string[]; delivery: 'sent' | 'simulated' | 'failed'; error: string | null; is_demo: boolean }): Promise<void>
 }
+
+export type OutboundStatus = 'pending' | 'sent' | 'needs_template' | 'failed'
 
 export interface Deps {
   config: EngineConfig

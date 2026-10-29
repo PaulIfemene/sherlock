@@ -1,7 +1,7 @@
 // In-memory Store for tests, and for running the engine with no database configured.
 import { randomUUID } from 'node:crypto'
 import type { ClaimRow, ClusterRow, EncryptedAddress, Evidence, SenderRow, VerdictRow } from './types'
-import type { Store } from './ports'
+import type { OutboundStatus, Store } from './ports'
 import { bucketOf, cosine, velocity } from './cluster'
 
 export interface MemoryState {
@@ -13,10 +13,13 @@ export interface MemoryState {
   verdicts: Map<string, VerdictRow>
   sourceItems: (Omit<Evidence, 'id'> & { embedding: number[] })[]
   events: { cluster_id?: string | null; claim_id?: string | null; kind: string; detail: string; created_at: string }[]
+  outbound: { id: string; claim_id: string; status: OutboundStatus; last_error: string | null }[]
+  alerts: { cluster_id: string; sent_to: string[]; delivery: string; error: string | null; is_demo: boolean }[]
+  alertEmails: string[]
 }
 
 export function memoryState(): MemoryState {
-  return { senders: new Map(), addresses: new Map(), claims: new Map(), clusters: new Map(), counts: new Map(), verdicts: new Map(), sourceItems: [], events: [] }
+  return { senders: new Map(), addresses: new Map(), claims: new Map(), clusters: new Map(), counts: new Map(), verdicts: new Map(), sourceItems: [], events: [], outbound: [], alerts: [], alertEmails: ['demo.reporter@example.org'] }
 }
 
 export function memoryStore(state: MemoryState = memoryState()): Store & { state: MemoryState } {
@@ -139,6 +142,42 @@ export function memoryStore(state: MemoryState = memoryState()): Store & { state
     },
     async addEvent(event) {
       state.events.push({ ...event, created_at: new Date().toISOString() })
+    },
+    async getCluster(id) {
+      const c = state.clusters.get(id)
+      if (!c) return null
+      const { embedding: _e, ...row } = c
+      return row
+    },
+    async saveVerdict(verdict) {
+      const row = { id: state.verdicts.get(verdict.cluster_id)?.id ?? randomUUID(), ...verdict }
+      state.verdicts.set(verdict.cluster_id, row)
+      return row
+    },
+    async setClusterStatus(id, status) {
+      const c = state.clusters.get(id)
+      if (c) c.status = status
+    },
+    async claimsInCluster(clusterId) {
+      return [...state.claims.values()].filter((c) => c.cluster_id === clusterId).sort((a, b) => a.received_at.localeCompare(b.received_at))
+    },
+    async setClusterClaimsStatus(clusterId, status) {
+      for (const c of state.claims.values()) if (c.cluster_id === clusterId) c.status = status
+    },
+    async enqueueOutbound(claimIds) {
+      const rows = claimIds.map((claim_id) => ({ id: randomUUID(), claim_id, status: 'pending' as const, last_error: null }))
+      state.outbound.push(...rows)
+      return rows.map(({ id, claim_id }) => ({ id, claim_id }))
+    },
+    async markOutbound(id, status, lastError) {
+      const row = state.outbound.find((o) => o.id === id)
+      if (row) Object.assign(row, { status, last_error: lastError })
+    },
+    async alertRecipients() {
+      return [...state.alertEmails]
+    },
+    async logAlert(alert) {
+      state.alerts.push(alert)
     },
   }
 }
