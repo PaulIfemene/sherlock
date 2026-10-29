@@ -125,7 +125,8 @@ export function greenApi(env: GreenApiEnv): WhatsApp {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chatId: chatIdFor(to), message: body }),
-        timeoutMs: 8000,
+        // Not retried (a retry could send twice), so allow for a slow connection.
+        timeoutMs: 15000,
       })
       SendResponse.parse(json)
     },
