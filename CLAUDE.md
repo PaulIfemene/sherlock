@@ -165,7 +165,7 @@ Rules:
 | `/` | Nav (logo, How it works, Pricing, Team, Newsroom pill, "Chat on WhatsApp" pill). Hero with the journalism image. "How it works" (send → check → confirm). Languages strip (English, Luganda, Kiswahili). The three information disorders and how Sherlock handles each. Trust section (official sources watched, human review, privacy). Pricing teaser. Footer band. |
 | `/check` | Web checker: text box plus image upload, language picker, submit → streams stage progress → shows the suggestive assessment, evidence list, and "a journalist will review this" when queued. Same engine as WhatsApp. |
 | `/pricing` | Three cards: Citizens (Free), Newsrooms (Subscription, featured black card), Platforms and Researchers (Data licence). FAQ below. |
-| `/team` | Team cards: Team Lead Chihi Ivana Nyokabi (journalism), Odeke Harry Victor (journalism), Paul Ifemene Chukwumaobim (IT, system design and development), Supervisor Tumwine Edward. Photos to be provided; use initials avatars until then. |
+| `/team` | "Meet our team" layout (breadcrumb, large title, intro, portrait cards with name and role). Team: Othieno Kemuel Samuel (Journalist), Thembo Kennedy (Journalist), Ivana Nyokabi Chihi (Journalist), Paul Ifemene (Developer). Photos go in `public/team/<slug>.jpg`; placeholders until then. |
 | `/terms`, `/privacy` | Plain-language placeholders marked "Draft, legal review pending". Privacy explains hashing, encryption, retention and STOP/DELETE/MYDATA. |
 
 The "Chat on WhatsApp" button is `https://wa.me/${VITE_WHATSAPP_NUMBER}?text=${encodeURIComponent('Hi Sherlock')}`.
